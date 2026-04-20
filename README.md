@@ -6,7 +6,7 @@ Elle utilise la bibliothèque [`html5-qrcode`](https://github.com/mebjas/html5-q
 
 ## URL de l'application
 
-https://loqode.github.io/Glide-QR-Scanner/
+[https://xxxenarisxx.github.io/ScannerGlide/]
 
 ## Fonctionnalités
 
@@ -26,7 +26,7 @@ https://loqode.github.io/Glide-QR-Scanner/
 
 Pour ignorer la superposition de confirmation et ouvrir l'URL immédiatement lors du scan, ajouter `?confirm=0` :
 
-https://loqode.github.io/Glide-QR-Scanner/?confirm=0
+https://xxxenarisxx.github.io/ScannerGlide/?confirm=0
 
 ## Utilisation dans Glide
 
