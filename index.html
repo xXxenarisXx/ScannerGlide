@@ -1,0 +1,238 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="UTF-8" />
+		<title>Minimal QR Scanner + Confirm</title>
+		<script src="https://unpkg.com/html5-qrcode"></script>
+
+		<style>
+			:root {
+				--radius-lg: 12px;
+				--radius-md: 10px;
+				--radius-sm: 8px;
+				--bg: #ffffff;
+				--bg-muted: #f3f3f3;
+				--text: #111111;
+				--text-muted: #666666;
+				--border: #cccccc;
+				--overlay: rgba(0, 0, 0, 0.6);
+				--danger: #b00020;
+			}
+			#reader {
+				width: min(512px, 100%);
+				margin: 0 auto;
+				border-radius: var(--radius-lg);
+				box-sizing: border-box;
+				overflow: hidden;
+			}
+			#reader video,
+			#reader canvas {
+				border-radius: var(--radius-md);
+				width: 100%;
+				height: auto;
+				display: block;
+			}
+			/* Simple full-screen overlay */
+			#overlay {
+				position: fixed;
+				inset: 0;
+				display: none;
+				align-items: center;
+				justify-content: center;
+				background: var(--overlay);
+				z-index: 9999;
+			}
+			#overlayCard {
+				background: var(--bg);
+				padding: 16px;
+				border-radius: var(--radius-lg);
+				width: min(90vw, 420px);
+				font-family:
+					system-ui,
+					-apple-system,
+					Segoe UI,
+					Roboto,
+					Arial,
+					sans-serif;
+			}
+			#overlayData {
+				margin: 12px 0;
+				padding: 10px;
+				background: var(--bg-muted);
+				border-radius: var(--radius-sm);
+				word-break: break-word;
+			}
+			#overlayActions {
+				display: flex;
+				gap: 8px;
+			}
+			#overlayActions button {
+				flex: 1;
+			}
+			#confirmBtn {
+				padding: 10px 12px;
+				border: 0;
+				border-radius: var(--radius-sm);
+				cursor: pointer;
+				background: var(--text);
+				color: var(--bg);
+				font-size: 16px;
+			}
+			#cancelBtn {
+				padding: 10px 12px;
+				border: 1px solid var(--border);
+				border-radius: var(--radius-sm);
+				cursor: pointer;
+				background: var(--bg-muted);
+				color: var(--text);
+				font-size: 16px;
+			}
+			#confirmBtn:disabled {
+				background: var(--text-muted);
+				cursor: not-allowed;
+			}
+			#urlError {
+				margin-top: 8px;
+				color: var(--danger);
+				font-size: 13px;
+				display: none;
+			}
+		</style>
+	</head>
+
+	<body>
+		<div id="reader"></div>
+
+		<!-- Overlay -->
+		<div id="overlay">
+			<div id="overlayCard">
+				<div><strong>Scanned data</strong></div>
+				<div id="overlayData">—</div>
+				<div id="overlayActions">
+					<button id="confirmBtn" type="button">Open</button>
+					<button id="cancelBtn" type="button">Cancel</button>
+				</div>
+				<div id="urlError">Scanned data is not a valid URL.</div>
+			</div>
+		</div>
+
+		<script>
+			// DOM REFERENCES
+			const overlay = document.getElementById("overlay");
+			const overlayData = document.getElementById("overlayData");
+			const confirmBtn = document.getElementById("confirmBtn");
+			const cancelBtn = document.getElementById("cancelBtn");
+			const urlError = document.getElementById("urlError");
+			const urlParams = new URLSearchParams(window.location.search);
+
+			function parseBooleanParam(value, defaultValue) {
+				if (value === null || value === undefined) return defaultValue;
+				const v = String(value).trim().toLowerCase();
+				if (["1", "true", "yes", "on"].includes(v)) return true;
+				if (["0", "false", "no", "off"].includes(v)) return false;
+				return defaultValue;
+			}
+
+			// By default we show the confirm/cancel overlay.
+			// Set `?confirm=0` (or `?confirm=false`) to open immediately on scan.
+			const confirmEnabled = parseBooleanParam(urlParams.get("confirm"), true);
+
+			// QR SCANNER INSTANCE
+			const html5QrCode = new Html5Qrcode("reader");
+
+			// STATE
+			let lastDecodedText = null;
+			let showingOverlay = false;
+
+			function openUrl(data) {
+				// Validate it's a proper URL before navigating.
+				const parsed = new URL(data);
+				window.location.href = parsed.toString();
+			}
+
+			// OVERLAY HELPERS
+			function showOverlay(text) {
+				showingOverlay = true;
+				lastDecodedText = text;
+				overlayData.textContent = text;
+				overlay.style.display = "flex";
+			}
+
+			function hideOverlay() {
+				overlay.style.display = "none";
+				overlayData.textContent = "—";
+				urlError.style.display = "none";
+				lastDecodedText = null;
+				showingOverlay = false;
+			}
+
+			// RESUME OR RESTART SCANNING
+			async function resumeScanning() {
+				try {
+					html5QrCode.resume();
+				} catch (e) {
+					try {
+						await html5QrCode.stop();
+					} catch (_) {}
+					startScanning();
+				}
+			}
+
+			// START CAMERA SCANNING
+			async function startScanning() {
+				await html5QrCode.start(
+					{ facingMode: "environment" },
+					{ fps: 10 },
+					async (decodedText) => {
+						// PREVENT REPEATED TRIGGERS
+						if (showingOverlay) return;
+
+						if (confirmEnabled) {
+							showOverlay(decodedText);
+							try {
+								html5QrCode.pause(true);
+							} catch (e) {}
+							return;
+						}
+
+						// No-confirm mode: open immediately.
+						showingOverlay = true;
+						lastDecodedText = decodedText;
+						try {
+							html5QrCode.pause(true);
+						} catch (e) {}
+
+						try {
+							openUrl(decodedText);
+						} catch (e) {
+							showOverlay(decodedText);
+							urlError.style.display = "block";
+						}
+					},
+					(error) => {
+						// IGNORE SCAN FAILURES
+					},
+				);
+			}
+
+			// CONFIRM HANDLER
+			confirmBtn.addEventListener("click", () => {
+				urlError.style.display = "none";
+				try {
+					openUrl(lastDecodedText || "");
+				} catch (e) {
+					urlError.style.display = "block";
+				}
+			});
+
+			// CANCEL HANDLER
+			cancelBtn.addEventListener("click", () => {
+				hideOverlay();
+				resumeScanning();
+			});
+
+			// BOOT
+			startScanning();
+		</script>
+	</body>
+</html>
